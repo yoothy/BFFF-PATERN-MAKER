@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BFFF PATTERN MAKER</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #ffffff;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #title {
+      position: fixed;
+      left: 24px;
+      top: 16px;
+      letter-spacing: 0.16em;
+      font-weight: 700; /* BOLD */
+      font-size: 14px;
+      z-index: 10;
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    #panel {
+      position: fixed;
+      right: 24px;
+      top: 16px;
+      z-index: 20;
+      background: rgba(0,0,0,0.75);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    #panel label {
+      display: block;
+      margin-top: 6px;
+      margin-bottom: 2px;
+      letter-spacing: 0.08em;
+      font-size: 10px;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+
+    #panel input[type="range"] {
+      width: 160px;
+    }
+
+    #panel input[type="file"] {
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    #saveBtn {
+      margin-top: 8px;
+      width: 100%;
+      padding: 6px 0;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #111;
+      color: #fff;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    #saveBtn:hover {
+      background: #222;
+    }
+  </style>
+</head>
+<body>
+  <div id="title">BFFF PATTERN MAKER</div>
+
+  <div id="panel">
+    <div style="margin-bottom:6px;">IMAGE → DOT FIELD</div>
+
+    <label>LOAD IMAGE</label>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <label>DOT SPACING</label>
+    <!-- 더 넓게까지 벌릴 수 있게 4~40 -->
+    <input type="range" id="spacingSlider" min="4" max="40" value="10">
+
+    <label>DOT CONNECTNESS</label>
+    <input type="range" id="densitySlider" min="200" max="420" value="300">
+
+    <button id="saveBtn">DOWNLOAD PNG</button>
+
+    <div style="margin-top:6px; opacity:0.7;">
+      CLICK CANVAS TO CYCLE BFFF COLORS
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"></script>
+  <script>
+    let img = null;
+    let dotSpacing = 10;
+    let densityFactor = 300;
+
+    // --- BFFF PALETTE (R,G,B) ---
+    const bfffPalette = [
+      [144, 1, 2],   // BFFF KILL RED
+      [86, 2, 2],    // BFFF BLOODY RED
+      [139, 132, 116], // BFFF MUDDY BROWN
+      [87, 79, 63],    // BFFF ROOT BROWN
+      [60, 65, 39],    // BFFF OLIVE
+      [17, 32, 17]     // BFFF MOSS GREEN
+    ];
+
+    // background colors = black + palette
+    const backgroundPalette = [[0,0,0], ...bfffPalette];
+
+    let dotColor = bfffPalette[0];
+    let bgColor  = [0,0,0]; // default black
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      pixelDensity(1);
+      noStroke();
+
+      document.getElementById("fileInput").addEventListener("change", handleFile);
+      document.getElementById("spacingSlider").addEventListener("input", e => {
+        dotSpacing = parseInt(e.target.value, 10);
+      });
+      document.getElementById("densitySlider").addEventListener("input", e => {
+        densityFactor = parseInt(e.target.value, 10);
+      });
+      document.getElementById("saveBtn").addEventListener("click", () => {
+        // p5.js canvas 저장
+        saveCanvas('bfff_pattern', 'png');
+      });
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+
+    function handleFile(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        loadImage(e.target.result, loaded => {
+          img = loaded;
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function draw() {
+      background(bgColor[0], bgColor[1], bgColor[2]);
+
+      if (!img) {
+        fill(180);
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text("LOAD AN IMAGE TO START", width / 2, height / 2);
+        return;
+      }
+
+      // 화면에 꽉 차게 비율 유지
+      const margin = 80;
+      const availableW = width - margin * 2;
+      const availableH = height - margin * 2;
+      const imgRatio = img.height / img.width;
+
+      let renderW = availableW;
+      let renderH = renderW * imgRatio;
+      if (renderH > availableH) {
+        renderH = availableH;
+        renderW = renderH / imgRatio;
+      }
+
+      const offsetX = (width - renderW) / 2;
+      const offsetY = (height - renderH) / 2;
+
+      // 삼각(헥사) 격자
+      const stepX = dotSpacing;
+      const stepY = dotSpacing * 0.85;
+      const cols = floor(renderW / stepX);
+      const rows = floor(renderH / stepY);
+
+      img.loadPixels();
+
+      push();
+      translate(offsetX, offsetY);
+      fill(dotColor[0], dotColor[1], dotColor[2]);
+
+      for (let y = 0; y < rows; y++) {
+        const xOffset = (y % 2 === 0) ? 0 : stepX * 0.5;
+
+        for (let x = 0; x < cols; x++) {
+          const px = x * stepX + xOffset;
+          const py = y * stepY;
+          if (px < 0 || px > renderW || py < 0 || py > renderH) continue;
+
+          const sx = floor(map(px, 0, renderW, 0, img.width  - 1));
+          const sy = floor(map(py, 0, renderH, 0, img.height - 1));
+          const idx = 4 * (sy * img.width + sx);
+
+          const r = img.pixels[idx + 0];
+          const g = img.pixels[idx + 1];
+          const b = img.pixels[idx + 2];
+          const bright = (r + g + b) / 3; // 0 dark ~ 255 bright
+
+          // 아주 밝은 영역은 점을 그리지 않아서 하이라이트 살리기
+          if (bright > 245) continue;
+
+          // ---------- 이미지 인식 더 잘 되도록 튜닝 ----------
+          // v: 어두울수록 1, 밝을수록 0
+          const v = 1 - bright / 255;
+
+          // 슬라이더로 전체 "끈적함" 스케일 조정
+          const stickyScale = map(densityFactor, 200, 420, 1.4, 3.0);
+
+          // 최대/최소 지름 (픽셀)
+          const maxDiameter = stepX * stickyScale; // 어두운 영역: 크게 겹쳐짐
+          const minDiameter = stepX * 0.18;        // 밝은 영역: 작은 점
+
+          // 감마 곡선으로 명암 대비 강화 (얼굴 윤곽 더 잘 보이게)
+          const gamma = 0.85; // 1보다 작으면 어두운 쪽 비율 증가
+          const eased = pow(v, gamma);
+
+          const diameter = constrain(
+            lerp(minDiameter, maxDiameter, eased),
+            stepX * 0.1,
+            stepX * stickyScale * 1.2
+          );
+
+          circle(px, py, diameter);
+        }
+      }
+      pop();
+    }
+
+    // 클릭 시: 도트색 + 배경색을 BFFF 팔레트 안에서만 랜덤 변경
+    function mousePressed() {
+      dotColor = random(bfffPalette);
+      bgColor  = random(backgroundPalette);
+    }
+  </script>
+</body>
+</html>
